@@ -5,15 +5,17 @@ package kafka
 import (
 	"github.com/IBM/sarama"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 )
 
 var (
 	Topic           = "orders"
 	ProtocolVersion = sarama.V3_0_0_0
+	logger          = otelslog.NewLogger("kafka")
 )
 
 func CreateKafkaProducer(brokers []string, log *logrus.Logger) (sarama.AsyncProducer, error) {
-	sarama.Logger = log
+	//sarama.Logger = log
 
 	saramaConfig := sarama.NewConfig()
 	saramaConfig.Producer.Return.Successes = true
@@ -36,7 +38,8 @@ func CreateKafkaProducer(brokers []string, log *logrus.Logger) (sarama.AsyncProd
 	// We will log to STDOUT if we're not able to produce messages.
 	go func() {
 		for err := range producer.Errors() {
-			log.Errorf("Failed to write message: %+v", err)
+			logger.Error("Failed to write message", "error", err.Err)
+			//log.Errorf("Failed to write message: %+v", err)
 		}
 	}()
 	return producer, nil
