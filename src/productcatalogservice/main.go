@@ -18,20 +18,22 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sirupsen/logrus"
-	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
-
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	otelcodes "go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdkresource "go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
 	"go.opentelemetry.io/otel/trace"
 
 	otelhooks "github.com/open-feature/go-sdk-contrib/hooks/open-telemetry/pkg"
@@ -48,21 +50,11 @@ import (
 )
 
 var (
-	log               *logrus.Logger
+	logger            = otelslog.NewLogger("productioncatalogservice")
 	catalog           []*pb.Product
 	resource          *sdkresource.Resource
 	initResourcesOnce sync.Once
 )
-
-func init() {
-	log = logrus.New()
-	var err error
-	catalog, err = readProductFiles()
-	if err != nil {
-		log.Fatalf("Reading Product Files: %v", err)
-		os.Exit(1)
-	}
-}
 
 func initResource() *sdkresource.Resource {
 	initResourcesOnce.Do(func() {
@@ -84,12 +76,31 @@ func initResource() *sdkresource.Resource {
 	return resource
 }
 
+func initLogProvider() *sdklog.LoggerProvider {
+	ctx := context.Background()
+
+	exporter, err := otlploggrpc.New(ctx,
+		otlploggrpc.WithEndpoint("otelcol:4317"),
+		otlploggrpc.WithInsecure())
+	if err != nil {
+		//log.Fatalf("new otlp trace grpc exporter failed: %v", err)
+		logger.Error("new otlp log grpc exporter failed")
+	}
+	lp := sdklog.NewLoggerProvider(
+		sdklog.WithProcessor(sdklog.NewSimpleProcessor(exporter)),
+		sdklog.WithResource(initResource()),
+	)
+	//otel.set(tp)
+	//otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+	return lp
+}
+
 func initTracerProvider() *sdktrace.TracerProvider {
 	ctx := context.Background()
 
 	exporter, err := otlptracegrpc.New(ctx)
 	if err != nil {
-		log.Fatalf("OTLP Trace gRPC Creation: %v", err)
+		logger.Error("OTLP Trace gRPC Creation")
 	}
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),
@@ -105,7 +116,7 @@ func initMeterProvider() *sdkmetric.MeterProvider {
 
 	exporter, err := otlpmetricgrpc.New(ctx)
 	if err != nil {
-		log.Fatalf("new otlp metric grpc exporter failed: %v", err)
+		logger.Error("new otlp metric grpc exporter failed")
 	}
 
 	mp := sdkmetric.NewMeterProvider(
@@ -117,41 +128,49 @@ func initMeterProvider() *sdkmetric.MeterProvider {
 }
 
 func main() {
+	lp := initLogProvider()
+	defer func() {
+		if err := lp.Shutdown(context.Background()); err != nil {
+			logger.Error("Error shutting down logger provider")
+		}
+	}()
+	global.SetLoggerProvider(lp)
+
 	tp := initTracerProvider()
 	defer func() {
 		if err := tp.Shutdown(context.Background()); err != nil {
-			log.Fatalf("Tracer Provider Shutdown: %v", err)
+			logger.Error("Tracer Provider Shutdown failed")
 		}
-		log.Println("Shutdown tracer provider")
+		logger.Info("Shutdown tracer provider")
 	}()
 
 	mp := initMeterProvider()
 	defer func() {
 		if err := mp.Shutdown(context.Background()); err != nil {
-			log.Fatalf("Error shutting down meter provider: %v", err)
+			logger.Error("Error shutting down meter provider")
 		}
-		log.Println("Shutdown meter provider")
+		logger.Info("Shutdown meter provider")
 	}()
 	openfeature.AddHooks(otelhooks.NewTracesHook())
 	err := openfeature.SetProvider(flagd.NewProvider())
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err.Error())
 	}
 
 	err = runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second))
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err.Error())
 	}
 
 	svc := &productCatalog{}
 	var port string
 	mustMapEnv(&port, "PRODUCT_CATALOG_SERVICE_PORT")
 
-	log.Infof("ProductCatalogService gRPC server started on port: %s", port)
+	logger.Info("ProductCatalogService gRPC server started on port", "port", port)
 
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
-		log.Fatalf("TCP Listen: %v", err)
+		logger.Error("TCP Listen failed")
 	}
 
 	srv := grpc.NewServer(
@@ -168,14 +187,14 @@ func main() {
 
 	go func() {
 		if err := srv.Serve(ln); err != nil {
-			log.Fatalf("Failed to serve gRPC server, err: %v", err)
+			logger.Error("Failed to serve gRPC server")
 		}
 	}()
 
 	<-ctx.Done()
 
 	srv.GracefulStop()
-	log.Println("ProductCatalogService gRPC server stopped")
+	logger.Info("ProductCatalogService gRPC server stopped")
 }
 
 type productCatalog struct {
@@ -218,7 +237,7 @@ func readProductFiles() ([]*pb.Product, error) {
 		products = append(products, res.Products...)
 	}
 
-	log.Infof("Loaded %d products", len(products))
+	logger.Info("Loaded products", "amount", len(products))
 
 	return products, nil
 }
@@ -226,7 +245,7 @@ func readProductFiles() ([]*pb.Product, error) {
 func mustMapEnv(target *string, key string) {
 	value, present := os.LookupEnv(key)
 	if !present {
-		log.Fatalf("Environment Variable Not Set: %q", key)
+		logger.Error("Environment Variable Not Set", "key", key)
 	}
 	*target = value
 }
