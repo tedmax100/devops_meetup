@@ -19,3 +19,25 @@ datasources:
         - url: http://localhost:8080/jaeger/ui/trace/$${__value.raw}
           name: trace_id
           urlDisplayLabel: View in Jaeger UI
+  - name: Loki
+    uid: loki
+    type: loki
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: trace_id
+          matcherType: label
+          name: Tempo
+          url: $${__value.raw}
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    url: http://tempo:3200
+    editable: true
+    jsonData:
+      nodeGraph:
+        eabled: true
+      serviceMap:
+        datasourceUid: 'webstore-metrics'
