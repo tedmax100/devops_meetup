@@ -7,7 +7,7 @@ This service consumes new orders from a Kafka topic.
 To build the service binary, run:
 
 ```sh
-cp pb/demo.proto src/accoutingservice/proto/demo.proto # root context
+cp pb/demo.proto src/accountingservice/proto/demo.proto # root context
 dotnet build # accounting service context
 ```
 
