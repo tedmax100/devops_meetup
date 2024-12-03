@@ -56,6 +56,15 @@ var (
 	initResourcesOnce sync.Once
 )
 
+func init() {
+	var err error
+	catalog, err = readProductFiles()
+	if err != nil {
+		fmt.Println("Reading Product Files: %v", err)
+		os.Exit(1)
+	}
+}
+
 func initResource() *sdkresource.Resource {
 	initResourcesOnce.Do(func() {
 		extraResources, _ := sdkresource.New(
