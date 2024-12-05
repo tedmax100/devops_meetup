@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net"
@@ -17,6 +18,11 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/plugin/dbresolver"
+	"gorm.io/plugin/opentelemetry/tracing"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -54,6 +60,7 @@ var (
 	catalog           []*pb.Product
 	resource          *sdkresource.Resource
 	initResourcesOnce sync.Once
+	db                *gorm.DB
 )
 
 func init() {
@@ -182,6 +189,33 @@ func main() {
 		logger.Error("TCP Listen failed")
 	}
 
+	primaryDsn := "host=postgres_primary user=user password=password dbname=postgres port=5432 sslmode=disable TimeZone=Asia/Taipei application_name=productioncatalogservice"
+	replicaDsn := "host=postgres_replica user=user password=password dbname=postgres port=5432 sslmode=disable TimeZone=Asia/Taipei application_name=productioncatalogservice"
+	db, err = gorm.Open(postgres.Open(primaryDsn), &gorm.Config{})
+	if err != nil {
+		panic("failed to connect database")
+	}
+
+	err = db.Use(
+		dbresolver.Register(dbresolver.Config{
+			Sources:           []gorm.Dialector{postgres.Open(primaryDsn)},
+			Replicas:          []gorm.Dialector{postgres.Open(replicaDsn)},
+			Policy:            dbresolver.RandomPolicy{},
+			TraceResolverMode: true,
+		}).
+			SetMaxIdleConns(2).
+			SetMaxOpenConns(2).
+			SetConnMaxIdleTime(10 * time.Minute).
+			SetConnMaxLifetime(1 * time.Hour),
+	)
+	if err != nil {
+		panic(fmt.Sprintf("failed to configure dbresolver: %v", err))
+	}
+
+	if err := db.Use(tracing.NewPlugin()); err != nil {
+		panic(err)
+	}
+
 	srv := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
@@ -270,10 +304,37 @@ func (p *productCatalog) Watch(req *healthpb.HealthCheckRequest, ws healthpb.Hea
 func (p *productCatalog) ListProducts(ctx context.Context, req *pb.Empty) (*pb.ListProductsResponse, error) {
 	span := trace.SpanFromContext(ctx)
 
+	var products []Product
+	if err := db.WithContext(ctx).Preload("Categories").Find(&products).Error; err != nil {
+		return nil, err
+	}
+
+	var pbProducts []*pb.Product
+	for _, product := range products {
+		var categoryNames []string
+		for _, category := range product.Categories {
+			categoryNames = append(categoryNames, category.Name)
+		}
+
+		pbProduct := &pb.Product{
+			Id:          product.ID,
+			Name:        product.Name,
+			Description: product.Description,
+			Picture:     product.Picture,
+			PriceUsd: &pb.Money{
+				CurrencyCode: product.PriceCurrencyCode,
+				Units:        int64(product.PriceUnits),
+				Nanos:        int32(product.PriceNanos),
+			},
+			Categories: categoryNames,
+		}
+		pbProducts = append(pbProducts, pbProduct)
+	}
+
 	span.SetAttributes(
-		attribute.Int("app.products.count", len(catalog)),
+		attribute.Int("app.products.count", len(pbProducts)),
 	)
-	return &pb.ListProductsResponse{Products: catalog}, nil
+	return &pb.ListProductsResponse{Products: pbProducts}, nil
 }
 
 func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductRequest) (*pb.Product, error) {
@@ -290,27 +351,44 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 		return nil, status.Errorf(codes.Internal, msg)
 	}
 
-	var found *pb.Product
-	for _, product := range catalog {
-		if req.Id == product.Id {
-			found = product
-			break
+	var product Product
+	if err := db.WithContext(ctx).Preload("Categories").Where("id = ?", req.Id).First(&product).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			msg := fmt.Sprintf("Product Not Found: %s", req.Id)
+			span.SetStatus(otelcodes.Error, msg)
+			span.AddEvent(msg)
+			return nil, status.Errorf(codes.NotFound, msg)
 		}
-	}
 
-	if found == nil {
-		msg := fmt.Sprintf("Product Not Found: %s", req.Id)
+		msg := fmt.Sprintf("Database Error: %v", err)
 		span.SetStatus(otelcodes.Error, msg)
 		span.AddEvent(msg)
-		return nil, status.Errorf(codes.NotFound, msg)
+		return nil, status.Errorf(codes.Internal, msg)
 	}
 
-	msg := fmt.Sprintf("Product Found - ID: %s, Name: %s", req.Id, found.Name)
+	var categoryNames []string
+	for _, category := range product.Categories {
+		categoryNames = append(categoryNames, category.Name)
+	}
+	pbProduct := &pb.Product{
+		Id:          product.ID,
+		Name:        product.Name,
+		Description: product.Description,
+		Picture:     product.Picture,
+		PriceUsd: &pb.Money{
+			CurrencyCode: product.PriceCurrencyCode,
+			Units:        int64(product.PriceUnits),
+			Nanos:        int32(product.PriceNanos),
+		},
+		Categories: categoryNames,
+	}
+
+	msg := fmt.Sprintf("Product Found - ID: %s, Name: %s", req.Id, pbProduct.Name)
 	span.AddEvent(msg)
 	span.SetAttributes(
-		attribute.String("app.product.name", found.Name),
+		attribute.String("app.product.name", pbProduct.Name),
 	)
-	return found, nil
+	return pbProduct, nil
 }
 
 func (p *productCatalog) SearchProducts(ctx context.Context, req *pb.SearchProductsRequest) (*pb.SearchProductsResponse, error) {
