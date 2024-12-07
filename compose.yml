@@ -1,5 +1,10 @@
+networks:
+  default:
+    name: opentelemetry-demo
+    driver: bridge
+
+
 include:
-  - base.yml
   - core-services.yml
   - dependent-services.yml
   - telemetry.yml
