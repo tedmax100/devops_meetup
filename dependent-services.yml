@@ -1,0 +1,175 @@
+services:
+  # ******************
+  # Dependent Services
+  # ******************
+  # Flagd, feature flagging service
+  flagd:
+    image: ${FLAGD_IMAGE}
+    container_name: flagd
+    deploy:
+      resources:
+        limits:
+          memory: 75M
+    restart: unless-stopped
+    environment:
+      - FLAGD_OTEL_COLLECTOR_URI=${OTEL_COLLECTOR_HOST}:${OTEL_COLLECTOR_PORT_GRPC}
+      - FLAGD_METRICS_EXPORTER=otel
+      - OTEL_RESOURCE_ATTRIBUTES
+      - OTEL_SERVICE_NAME=flagd
+    command: [
+      "start",
+      "--uri",
+      "file:./etc/flagd/demo.flagd.json"
+    ]
+    ports:
+      - 8013
+    volumes:
+      - ./src/flagd:/etc/flagd
+    logging:
+      *logging
+
+  # Flagd UI for configuring the feature flag service
+  flagdui:
+    image: ${IMAGE_NAME}:${DEMO_VERSION}-flagdui
+    container_name: flagdui
+    build:
+      context: ./
+      dockerfile: ${FLAGD_UI_DOCKERFILE}
+    deploy:
+      resources:
+        limits:
+          memory: 75M
+    restart: unless-stopped
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://${OTEL_COLLECTOR_HOST}:${OTEL_COLLECTOR_PORT_HTTP}
+      - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+      - OTEL_RESOURCE_ATTRIBUTES
+      - OTEL_SERVICE_NAME=flagdui
+    ports:
+      - "${FLAGD_UI_PORT}"
+    depends_on:
+      otelcol:
+        condition: service_started
+      flagd:
+        condition: service_started
+    volumes:
+      - ./src/flagd:/app/data
+
+  # Kafka used by Checkout, Accounting, and Fraud Detection services
+  kafka:
+    image: ${IMAGE_NAME}:${DEMO_VERSION}-kafka
+    container_name: kafka
+    build:
+      context: ./
+      dockerfile: ${KAFKA_SERVICE_DOCKERFILE}
+      cache_from:
+        - ${IMAGE_NAME}:${IMAGE_VERSION}-kafka
+      args:
+        OTEL_JAVA_AGENT_VERSION: ${OTEL_JAVA_AGENT_VERSION}
+    deploy:
+      resources:
+        limits:
+          memory: 600M
+    restart: unless-stopped
+    environment:
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://${OTEL_COLLECTOR_HOST}:${OTEL_COLLECTOR_PORT_HTTP}
+      - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+      - OTEL_RESOURCE_ATTRIBUTES
+      - OTEL_SERVICE_NAME=kafka
+      - KAFKA_HEAP_OPTS=-Xmx400m -Xms400m
+    healthcheck:
+      test: nc -z kafka 9092
+      start_period: 10s
+      interval: 5s
+      timeout: 10s
+      retries: 10
+    logging: *logging
+
+  # Valkey used by Cart service
+  valkey-cart:
+    image: ${VALKEY_IMAGE}
+    container_name: valkey-cart
+    user: valkey
+    deploy:
+      resources:
+        limits:
+          memory: 20M
+    restart: unless-stopped
+    ports:
+      - "${VALKEY_PORT}"
+    logging: *logging
+
+  # Postgres primary node
+  postgres_primary:
+    <<: *postgres-common
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_HOST_AUTH_METHOD: "scram-sha-256\nhost replication all 0.0.0.0/0 md5"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    command: |
+      postgres 
+      -c wal_level=replica 
+      -c hot_standby=on 
+      -c max_wal_senders=10 
+      -c max_replication_slots=10 
+      -c hot_standby_feedback=on
+      -c track_activities=on
+      -c track_counts=on
+      -c track_io_timing=on
+      -c log_connections=on
+      -c log_disconnections=on
+      -c log_rotation_age=1d
+      -c log_rotation_size=10MB
+      -c log_min_duration_statement=500 
+      -c shared_buffers=256MB
+      -c effective_cache_size=512MB
+      -c checkpoint_timeout=10min
+    volumes:
+      - ./init/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: "pg_isready -U user"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+  # Postgres replica node
+  postgres_replica:
+    <<: *postgres-common
+    ports:
+      - 5433:5432
+    environment:
+      PGUSER: replicator
+      PGPASSWORD: replicator_password
+    command: |
+      bash -c "
+      RETRY_DELAY=1
+      until pg_basebackup --pgdata=/var/lib/postgresql/data -R --slot=replication_slot --host=postgres_primary --port=5432
+      do
+      echo 'Waiting for primary to connect...'
+      sleep \$RETRY_DELAY
+      RETRY_DELAY=\$((RETRY_DELAY * 2))
+      if [ \$RETRY_DELAY -gt 60 ]; then
+        RETRY_DELAY=60
+      fi
+      done
+      echo 'Backup done, starting replica...'
+      chmod 0700 /var/lib/postgresql/data
+      postgres
+      "
+    depends_on:
+      postgres_primary:
+        condition: service_healthy
+    restart: on-failure
+    healthcheck:
+      test: |
+        bash -c "
+        psql -U replicator -d postgres -c 'SELECT state FROM pg_stat_wal_receiver' | grep streaming
+        if [ $? -ne 0 ]; then exit 1; fi
+        "
+      interval: 10s
+      timeout: 5s
+      retries: 3
