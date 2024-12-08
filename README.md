@@ -26,6 +26,67 @@ Once the images are built and containers are started you can access:
   `make run-tracetesting`
 - Flagd configurator UI: <http://localhost:8080/feature>
 
+# Place Order Sequence Diagram
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant CS as CheckoutService
+    participant Cart as CartService
+    participant Pdt as ProductCatalogService
+    participant Cur as CurrencyService
+    participant Pay as PaymentService
+    participant Ship as ShippingService
+    participant Email as EmailService
+    participant Kafka as Kafka Producer
+
+    U->>CS: PlaceOrder(UserId, Address, Email, CreditCard)
+    activate CS
+
+    note over CS: prepareOrderItemsAndShippingQuoteFromCart
+    CS->>Cart: GetCart(UserId)
+    Cart-->>CS: CartItems
+    loop For each item
+        CS->>Pdt: GetProduct(ProductID)
+        Pdt-->>CS: ProductInfo
+    end
+    CS->>Ship: GetQuote(Address, Items)
+    Ship-->>CS: ShippingCost(USD)
+    CS->>Cur: Convert(ShippingCost, UserCurrency)
+    Cur-->>CS: ShippingCost(UserCurrency)
+
+    note over CS: 計算總價(商品+運費)
+
+    CS->>Pay: Charge(Amount, CreditCard)
+    Pay-->>CS: TransactionID
+
+    CS->>Ship: ShipOrder(Address, CartItems)
+    Ship-->>CS: TrackingID
+
+    CS->>Cart: EmptyCart(UserId)
+    Cart-->>CS: Acknowledged
+
+    note over CS: 建立 OrderResult
+
+    CS->>Email: send_order_confirmation(Email, OrderResult)
+    Email-->>CS: Success/Failure
+
+    note over CS: 若Kafka連線存在
+    CS->>Kafka: sendToPostProcessor(OrderResult)
+    Kafka-->>CS: Ack
+
+    CS-->>U: PlaceOrderResponse(OrderResult)
+    deactivate CS
+```
+
+說明：
+- 使用者 (User) 呼叫 PlaceOrder 進行結帳。
+- CheckoutService 先向 CartService 取得購物車內容，再依據產品目錄(ProductCatalogService)取得商品資訊、向 ShippingService 詢價並對運費進行貨幣轉換(CurrencyService)。
+- 計算整體金額後向 PaymentService 請求扣款，成功後向 ShippingService 下單出貨並清空購物車(CartService)。
+- 將訂單結果通知EmailService寄送通知信。
+- 若有 Kafka，則將訂單資訊送入Kafka做後續處理。
+- 最後返回 PlaceOrderResponse 給使用者。
+
+
 ## Welcome to the OpenTelemetry Astronomy Shop Demo
 
 This repository contains the OpenTelemetry Astronomy Shop, a microservice-based
