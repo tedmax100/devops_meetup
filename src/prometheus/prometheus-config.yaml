@@ -12,3 +12,17 @@ scrape_configs:
   static_configs:
   - targets:
     - 'otelcol:8888'
+- job_name: 'loki'
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  metrics_path: '/metrics'
+  scheme: 'http'
+  static_configs:
+    - targets: ['loki:3100'] 
+- job_name: 'tempo'
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  metrics_path: '/metrics'
+  scheme: 'http'
+  static_configs:
+    - targets: ['tempo:3200']
