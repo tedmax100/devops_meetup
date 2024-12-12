@@ -8060,7 +8060,7 @@ data:
               },
               "editorMode": "code",
               "exemplar": false,
-              "expr": "topk(7, sum by (span_name,service_name)(increase(duration_milliseconds_sum{service_name=~\"${service}\", span_name=~\"$span_name\"}[5m]) / increase(traces_span_metrics_duration_milliseconds_count{service_name=~\"${service}\",span_name=~\"$span_name\"}[5m\n])))",
+              "expr": "topk(7, sum by (span_name,service_name)(increase(traces_span_metrics_duration_milliseconds_sum{service_name=~\"${service}\", span_name=~\"$span_name\"}[5m]) / increase(traces_span_metrics_duration_milliseconds_count{service_name=~\"${service}\",span_name=~\"$span_name\"}[5m\n])))",
               "instant": true,
               "interval": "",
               "legendFormat": "{{span_name}} [{{service_name}}]",
