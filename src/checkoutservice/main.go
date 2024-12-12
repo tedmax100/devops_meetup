@@ -36,6 +36,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/log"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -59,6 +60,30 @@ var logger = otelslog.NewLogger("checkoutservice")
 var tracer trace.Tracer
 var resource *sdkresource.Resource
 var initResourcesOnce sync.Once
+var placeOrderCounter metric.Int64Counter
+var placeOrderHistogram metric.Int64Histogram
+
+//var meter   otel.Meter(name)
+
+func init() {
+	var err error
+	meter := otel.Meter("checkoutservice")
+	// Initialize the counter for tracking the total number of placed orders
+	placeOrderCounter, err = meter.Int64Counter("checkout.place_order_count",
+		metric.WithDescription("The total number of placed orders"),
+		metric.WithUnit("1")) // "1" indicates a count unit
+	if err != nil {
+		panic(err)
+	}
+
+	// Initialize the histogram for tracking the distribution of order processing times
+	placeOrderHistogram, err = meter.Int64Histogram("checkout.place_order_duration",
+		metric.WithDescription("The distribution of time taken to place orders"),
+		metric.WithUnit("ms")) // "ms" indicates the unit is milliseconds
+	if err != nil {
+		panic(err)
+	}
+}
 
 func initResource() *sdkresource.Resource {
 	initResourcesOnce.Do(func() {
@@ -130,7 +155,8 @@ func initMeterProvider() *sdkmetric.MeterProvider {
 	}
 
 	mp := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter)),
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(
+			exporter, sdkmetric.WithInterval(3*time.Second))),
 		sdkmetric.WithResource(initResource()),
 	)
 	otel.SetMeterProvider(mp)
@@ -276,6 +302,8 @@ func (cs *checkoutService) Watch(req *healthpb.HealthCheckRequest, ws healthpb.H
 
 func (cs *checkoutService) PlaceOrder(ctx context.Context, req *pb.PlaceOrderRequest) (*pb.PlaceOrderResponse, error) {
 	span := trace.SpanFromContext(ctx)
+	defer span.End()
+
 	span.SetAttributes(
 		attribute.String("app.user.id", req.UserId),
 		attribute.String("app.user.currency", req.UserCurrency),
@@ -363,6 +391,7 @@ func (cs *checkoutService) PlaceOrder(ctx context.Context, req *pb.PlaceOrderReq
 		cs.sendToPostProcessor(ctx, orderResult)
 	}
 
+	placeOrderCounter.Add(ctx, 1)
 	resp := &pb.PlaceOrderResponse{Order: orderResult}
 	return resp, nil
 }
