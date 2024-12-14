@@ -41,10 +41,15 @@ datasources:
         datasourceUid: 'webstore-metrics'
       tracesToLogsV2:
         datasourceUid: 'loki'
-        tags: []
+        tags: [
+          {
+            "key": "service.name",
+            "value": "service_name"
+          }
+        ]
         customQuery: true
         query: >-
-          {exporter="OTLP"}|="$${__trace.traceId}"
+          {$${__tags}}| trace_id="$${__trace.traceId}"
         filterByTraceID: false
         spanEndTimeShift: 5m
         spanStartTimeShift: '-5m'
