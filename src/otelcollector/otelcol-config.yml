@@ -120,7 +120,16 @@ processors:
           # could be removed when https://github.com/vercel/next.js/pull/64852 is fixed upstream
           - replace_pattern(name, "\\?.*", "")
           - replace_match(name, "GET /api/products/*", "GET /api/products/{productId}")
-
+    log_statements:   
+      - context: log
+        statements:
+          - set(resource.attributes["severity.text"], severity_text)
+          - set(resource.attributes["severity.text"], "TRACE") where severity_number == 1
+          - set(resource.attributes["severity.text"], "DEBUG") where severity_number == 5
+          - set(resource.attributes["severity.text"], "INFO") where severity_number == 9
+          - set(resource.attributes["severity.text"], "WARN") where severity_number == 13
+          - set(resource.attributes["severity.text"], "ERROR") where severity_number == 17
+          - set(resource.attributes["severity.text"], "FATAL") where severity_number == 21
 connectors:
   spanmetrics:
 
@@ -129,12 +138,12 @@ service:
     traces:
       receivers: [otlp]
       processors: [transform, batch]
-      exporters: [otlp, debug, spanmetrics]
+      exporters: [otlp, spanmetrics]
     metrics:
       receivers: [hostmetrics, docker_stats, httpcheck/frontendproxy, otlp, prometheus, redis, spanmetrics]
       processors: [batch]
-      exporters: [otlphttp/prometheus, debug]
+      exporters: [otlphttp/prometheus]
     logs:
       receivers: [otlp]
-      processors: [batch]
+      processors: [transform, batch]
       exporters: [otlphttp/logs, opensearch, debug]

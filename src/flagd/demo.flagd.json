@@ -44,7 +44,7 @@
         "on": true,
         "off": false
       },
-      "defaultVariant": "off"
+      "defaultVariant": "on"
     },
     "kafkaQueueProblems": {
       "description": "Overloads Kafka queue while simultaneously introducing a consumer side delay leading to a lag spike",
@@ -62,7 +62,7 @@
         "on": true,
         "off": false
       },
-      "defaultVariant": "off"
+      "defaultVariant": "on"
     },
     "paymentServiceFailure": {
       "description": "Fail payment service charge requests n%",
@@ -76,7 +76,7 @@
         "10%": 0.1,
         "off": 0
       },
-      "defaultVariant": "off"
+      "defaultVariant": "90%"
     },
     "paymentServiceUnreachable": {
       "description": "Payment service is unavailable",
@@ -85,7 +85,7 @@
         "on": true,
         "off": false
       },
-      "defaultVariant": "off"
+      "defaultVariant": "on"
     },
     "loadgeneratorFloodHomepage": {
       "description": "Flood the frontend with a large amount of requests.",
@@ -105,6 +105,44 @@
         "off": 0
       },
       "defaultVariant": "off"
+    },
+    "productCatalogLongTailLatency": {
+      "description": "Simulate long-tail latency in ProductCatalogService",
+      "state": "ENABLED",
+      "variants": {
+        "enabled": true,
+        "disabled": false
+      },
+      "defaultVariant": "enabled"
+    },
+    "productCatalogLatencyMs": {
+      "description": "Set the delay range (ms) for ProductCatalogService when long-tail latency is enabled",
+      "state": "ENABLED",
+      "variants": {
+        "low": 500,
+        "high": 2000,
+        "disabled": 0
+      },
+      "defaultVariant": "high"
+    },
+    "productCatalogTimeoutFailure": {
+      "description": "Simulate timeout failures in ProductCatalogService",
+      "state": "ENABLED",
+      "variants": {
+        "enabled": 1,
+        "disabled": 0
+      },
+      "defaultVariant": "enabled"
+    },
+    "productCatalogTimeoutRate": {
+      "description": "Set the failure rate (%) for ProductCatalogService timeouts",
+      "state": "ENABLED",
+      "variants": {
+        "low": 1,
+        "high": 5,
+        "disabled": 0
+      },
+      "defaultVariant": "high"
     }
   }
 }

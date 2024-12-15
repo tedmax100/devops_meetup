@@ -325,6 +325,7 @@ func (cs *checkoutService) PlaceOrder(ctx context.Context, req *pb.PlaceOrderReq
 
 	prep, err := cs.prepareOrderItemsAndShippingQuoteFromCart(ctx, req.UserId, req.UserCurrency, req.Address)
 	if err != nil {
+		logger.ErrorContext(ctx, err.Error(), "event", "prepareOrderItemsAndShippingQuoteFromCart failed")
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 	span.AddEvent("prepared")
@@ -340,6 +341,8 @@ func (cs *checkoutService) PlaceOrder(ctx context.Context, req *pb.PlaceOrderReq
 
 	txID, err := cs.chargeCard(ctx, total, req.CreditCard)
 	if err != nil {
+		logger.ErrorContext(ctx, err.Error(), "event", "chargeCard failed")
+
 		return nil, status.Errorf(codes.Internal, "failed to charge card: %+v", err)
 	}
 	logger.InfoContext(ctx, "payment went through", "transaction_id", txID)
@@ -350,6 +353,8 @@ func (cs *checkoutService) PlaceOrder(ctx context.Context, req *pb.PlaceOrderReq
 
 	shippingTrackingID, err := cs.shipOrder(ctx, req.Address, prep.cartItems)
 	if err != nil {
+		logger.ErrorContext(ctx, err.Error(), "event", "shipOrder failed")
+
 		return nil, status.Errorf(codes.Unavailable, "shipping error: %+v", err)
 	}
 	shippingTrackingAttribute := attribute.String("app.shipping.tracking.id", shippingTrackingID)

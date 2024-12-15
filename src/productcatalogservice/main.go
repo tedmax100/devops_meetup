@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math/rand"
 	"net"
 	"os"
 	"os/signal"
@@ -56,14 +57,20 @@ import (
 )
 
 var (
-	logger            = otelslog.NewLogger("productioncatalogservice")
+	serviceName       string
+	logger            = otelslog.NewLogger(serviceName)
 	catalog           []*pb.Product
 	resource          *sdkresource.Resource
 	initResourcesOnce sync.Once
 	db                *gorm.DB
+	containerId       string
 )
 
 func init() {
+	mustMapEnv(&serviceName, "OTEL_SERVICE_NAME")
+	fmt.Println(serviceName)
+	mustMapEnv(&containerId, "HOSTNAME")
+	fmt.Println(containerId)
 	var err error
 	catalog, err = readProductFiles()
 	if err != nil {
@@ -81,7 +88,8 @@ func initResource() *sdkresource.Resource {
 			sdkresource.WithContainer(),
 			sdkresource.WithHost(),
 			sdkresource.WithAttributes(
-				semconv.ServiceNameKey.String("productcatalogservice"),
+				semconv.ServiceNameKey.String(serviceName),
+				semconv.ContainerID(containerId),
 			),
 		)
 		resource, _ = sdkresource.Merge(
@@ -306,6 +314,7 @@ func (p *productCatalog) ListProducts(ctx context.Context, req *pb.Empty) (*pb.L
 
 	var products []Product
 	if err := db.WithContext(ctx).Preload("Categories").Find(&products).Error; err != nil {
+		logger.ErrorContext(ctx, err.Error(), "event", "ListProducts failed")
 		return nil, err
 	}
 
@@ -343,16 +352,48 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 		attribute.String("app.product.id", req.Id),
 	)
 
+	client := openfeature.NewClient("productCatalog")
+	longTailEnabled, _ := client.BooleanValue(
+		ctx, "productCatalogLongTailLatency", false, openfeature.EvaluationContext{},
+	)
+
+	if longTailEnabled {
+		delayLow, _ := client.IntValue(ctx, "productCatalogLatencyMs.low", 500, openfeature.EvaluationContext{})
+		delayHigh, _ := client.IntValue(ctx, "productCatalogLatencyMs.high", 2000, openfeature.EvaluationContext{})
+
+		delay := delayLow + int64(rand.Intn(int(delayHigh-delayLow+1)))
+		logger.InfoContext(ctx, "Simulating long-tail latency", "delay_ms", delay)
+		time.Sleep(time.Duration(delay) * time.Millisecond)
+	}
+
+	timeoutFailureEnabled, _ := client.IntValue(
+		ctx, "productCatalogTimeoutFailure.enabled", 0, openfeature.EvaluationContext{},
+	)
+	if timeoutFailureEnabled > 0 {
+		timeoutRate, _ := client.IntValue(
+			ctx, "productCatalogTimeoutRate.low", 1, openfeature.EvaluationContext{},
+		)
+		if rand.Intn(100) < int(timeoutRate) {
+			msg := "Simulated ProductCatalogService timeout"
+			span.SetStatus(otelcodes.Error, msg)
+			span.AddEvent(msg)
+			logger.WarnContext(ctx, msg)
+			return nil, status.Error(codes.DeadlineExceeded, msg)
+		}
+	}
+
 	// GetProduct will fail on a specific product when feature flag is enabled
 	if p.checkProductFailure(ctx, req.Id) {
 		msg := fmt.Sprintf("Error: ProductCatalogService Fail Feature Flag Enabled")
 		span.SetStatus(otelcodes.Error, msg)
 		span.AddEvent(msg)
+		logger.ErrorContext(ctx, msg, "event", "GetProduct failed")
 		return nil, status.Errorf(codes.Internal, msg)
 	}
 
 	var product Product
 	if err := db.WithContext(ctx).Preload("Categories").Where("id = ?", req.Id).First(&product).Error; err != nil {
+		logger.ErrorContext(ctx, err.Error(), "event", "GetProduct failed")
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			msg := fmt.Sprintf("Product Not Found: %s", req.Id)
 			span.SetStatus(otelcodes.Error, msg)
@@ -424,4 +465,9 @@ func createClient(ctx context.Context, svcAddr string) (*grpc.ClientConn, error)
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
+}
+
+func (p *productCatalog) simulateLongTail(ctx context.Context) {
+
+	return
 }
