@@ -12,7 +12,7 @@
 
 ## Start the demo
 1. `make build`
-2. `make start` or `docker compose -f compose.yml up -d`
+2. `docker compose -f compose.yml up -d` or `make start`
 
 ## Verify the web store and Telemetry
 

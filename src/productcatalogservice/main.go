@@ -362,7 +362,7 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 		delayHigh, _ := client.IntValue(ctx, "productCatalogLatencyMs.high", 2000, openfeature.EvaluationContext{})
 
 		delay := delayLow + int64(rand.Intn(int(delayHigh-delayLow+1)))
-		logger.InfoContext(ctx, "Simulating long-tail latency", "delay_ms", delay)
+		//logger.InfoContext(ctx, "Simulating long-tail latency", "delay_ms", delay)
 		time.Sleep(time.Duration(delay) * time.Millisecond)
 	}
 
