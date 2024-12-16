@@ -131,6 +131,19 @@
           },
           "editorMode": "code",
           "exemplar": true,
+          "expr": "histogram_quantile(0.999, sum(rate(traces_span_metrics_duration_milliseconds_bucket{service_name=\"${service}\"}[$__rate_interval])) by (le))",
+          "hide": false,
+          "legendFormat": "quantile999",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "exemplar": true,
           "expr": "histogram_quantile(0.50, sum(rate(traces_span_metrics_duration_milliseconds_bucket{service_name=\"${service}\"}[$__rate_interval])) by (le))",
           "legendFormat": "quantile50",
           "range": true,
@@ -161,19 +174,6 @@
           "legendFormat": "quantile99",
           "range": true,
           "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "webstore-metrics"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "histogram_quantile(0.999, sum(rate(traces_span_metrics_duration_milliseconds_bucket{service_name=\"${service}\"}[$__rate_interval])) by (le))",
-          "hide": false,
-          "legendFormat": "quantile999",
-          "range": true,
-          "refId": "D"
         }
       ],
       "title": "Latency for ${service}",
@@ -270,6 +270,7 @@
           "editorMode": "code",
           "expr": " sum by (span_name) (rate(traces_span_metrics_calls_total{status_code=\"STATUS_CODE_ERROR\", service_name=\"${service}\"}[$__rate_interval]))",
           "interval": "",
+          "exemplar": true,
           "legendFormat": "{{ span_name }}",
           "range": true,
           "refId": "A"

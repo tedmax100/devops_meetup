@@ -132,6 +132,29 @@ processors:
           - set(resource.attributes["severity.text"], "FATAL") where severity_number == 21
 connectors:
   spanmetrics:
+    histogram:
+      explicit:
+        buckets: [1ms, 5ms, 10ms, 100ms, 250ms, 500ms, 1s, 5s]
+    dimensions:
+      - name: http.method
+        default: GET
+      - name: http.status_code
+    exemplars:
+      enabled: true
+    #exclude_dimensions: ['status.code']
+    dimensions_cache_size: 1000
+    aggregation_temporality: "AGGREGATION_TEMPORALITY_CUMULATIVE"    
+    metrics_flush_interval: 15s
+    metrics_expiration: 5m
+    events:
+      enabled: true
+      dimensions:
+        - name: exception.type
+        - name: exception.message
+    resource_metrics_key_attributes:
+      - service.name
+      - telemetry.sdk.language
+      - telemetry.sdk.name
 
 service:
   pipelines:
@@ -140,7 +163,8 @@ service:
       processors: [transform, batch]
       exporters: [otlp, spanmetrics]
     metrics:
-      receivers: [hostmetrics, docker_stats, httpcheck/frontendproxy, otlp, prometheus, redis, spanmetrics]
+      #receivers: [hostmetrics, docker_stats, httpcheck/frontendproxy, otlp, prometheus, redis, spanmetrics]
+      receivers: [ otlp, spanmetrics]
       processors: [batch]
       exporters: [otlphttp/prometheus]
     logs:
