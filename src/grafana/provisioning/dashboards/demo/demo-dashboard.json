@@ -122,7 +122,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.3.0",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "datasource": {
@@ -260,7 +260,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.3.0",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "datasource": {
@@ -268,9 +268,9 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
+          "exemplar": true,
           "expr": " sum by (span_name) (rate(traces_span_metrics_calls_total{status_code=\"STATUS_CODE_ERROR\", service_name=\"${service}\"}[$__rate_interval]))",
           "interval": "",
-          "exemplar": true,
           "legendFormat": "{{ span_name }}",
           "range": true,
           "refId": "A"
@@ -360,7 +360,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.3.0",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "datasource": {
@@ -457,7 +457,7 @@
         },
         "showHeader": true
       },
-      "pluginVersion": "11.3.0",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "alias": "",
@@ -563,7 +563,7 @@
           }
         ]
       },
-      "pluginVersion": "11.3.0",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "alias": "",
@@ -610,6 +610,178 @@
       "panels": [],
       "title": "Application Metrics",
       "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "webstore-metrics"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 27
+      },
+      "id": 21,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.3.1",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(increase(traces_span_metrics_events_total{http_status_code=\"500\"}[60s]))",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "timeFrom": "10m",
+      "title": "HTTP 500 Errors (Last 1m)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "webstore-metrics"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 300
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 27
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.3.1",
+      "targets": [
+        {
+          "editorMode": "code",
+          "exemplar": true,
+          "expr": "histogram_quantile(0.5, sum(rate(traces_span_metrics_duration_milliseconds_bucket{service_name=\"checkoutservice\", span_name=\"oteldemo.CheckoutService/PlaceOrder\"}[$__rate_interval])) by (le))",
+          "legendFormat": "PlaceOrder",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.5, sum(rate(traces_span_metrics_duration_milliseconds_bucket{service_name=\"checkoutservice\", span_name=\"oteldemo.CartService/GetCart\"}[$__rate_interval])) by (le))",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "GetCart",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "timeFrom": "10m",
+      "title": "Checkout & Cart p50 Latency (ms)",
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -676,7 +848,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 27
+        "y": 35
       },
       "id": 6,
       "options": {
@@ -691,7 +863,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.3.0",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "datasource": {
@@ -797,7 +969,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 27
+        "y": 35
       },
       "id": 8,
       "options": {
@@ -812,7 +984,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.3.0",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "datasource": {
@@ -902,7 +1074,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 35
+        "y": 43
       },
       "id": 4,
       "options": {
@@ -917,7 +1089,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.3.0",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "datasource": {
@@ -999,7 +1171,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 35
+        "y": 43
       },
       "id": 16,
       "interval": "2m",
@@ -1015,7 +1187,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.3.0",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "datasource": {

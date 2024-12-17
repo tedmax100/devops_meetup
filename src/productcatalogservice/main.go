@@ -358,21 +358,19 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 	)
 
 	if longTailEnabled {
-		delayLow, _ := client.IntValue(ctx, "productCatalogLatencyMs.low", 500, openfeature.EvaluationContext{})
-		delayHigh, _ := client.IntValue(ctx, "productCatalogLatencyMs.high", 2000, openfeature.EvaluationContext{})
+		latencyMax, _ := client.IntValue(ctx, "productCatalogLatencyMs", 2000, openfeature.EvaluationContext{})
 
-		delay := delayLow + int64(rand.Intn(int(delayHigh-delayLow+1)))
-		//logger.InfoContext(ctx, "Simulating long-tail latency", "delay_ms", delay)
+		delay := int64(rand.Intn(int(latencyMax) + 1)) // 0 ~ latencyMax
 		time.Sleep(time.Duration(delay) * time.Millisecond)
 	}
 
-	timeoutFailureEnabled, _ := client.IntValue(
-		ctx, "productCatalogTimeoutFailure.enabled", 0, openfeature.EvaluationContext{},
+	timeoutFailureEnabled, _ := client.BooleanValue(
+		ctx, "productCatalogTimeoutFailure", false, openfeature.EvaluationContext{},
 	)
-	if timeoutFailureEnabled > 0 {
+	if timeoutFailureEnabled {
 		span.SetAttributes(attribute.KeyValue{Key: "productCatalogLongTailLatency", Value: attribute.BoolValue(true)})
 		timeoutRate, _ := client.IntValue(
-			ctx, "productCatalogTimeoutRate.low", 1, openfeature.EvaluationContext{},
+			ctx, "productCatalogTimeoutRate", 1, openfeature.EvaluationContext{},
 		)
 		if rand.Intn(100) < int(timeoutRate) {
 			msg := "Simulated ProductCatalogService timeout"
