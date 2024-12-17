@@ -62,7 +62,7 @@
         "on": true,
         "off": false
       },
-      "defaultVariant": "on"
+      "defaultVariant": "off"
     },
     "paymentServiceFailure": {
       "description": "Fail payment service charge requests n%",
@@ -76,7 +76,7 @@
         "10%": 0.1,
         "off": 0
       },
-      "defaultVariant": "50%"
+      "defaultVariant": "off"
     },
     "paymentServiceUnreachable": {
       "description": "Payment service is unavailable",
@@ -119,8 +119,8 @@
       "description": "Set the delay range (ms) for ProductCatalogService when long-tail latency is enabled",
       "state": "ENABLED",
       "variants": {
-        "low": 500,
-        "high": 2000,
+        "low": 700,
+        "high": 4000,
         "disabled": 0
       },
       "defaultVariant": "high"
@@ -142,7 +142,7 @@
         "high": 5,
         "disabled": 0
       },
-      "defaultVariant": "low"
+      "defaultVariant": "high"
     }
   }
 }
