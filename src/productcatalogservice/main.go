@@ -351,6 +351,7 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 	span.SetAttributes(
 		attribute.String("app.product.id", req.Id),
 	)
+	defer span.End()
 
 	client := openfeature.NewClient("productCatalog")
 	longTailEnabled, _ := client.BooleanValue(
@@ -378,6 +379,7 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 			span.SetStatus(otelcodes.Error, msg)
 			span.AddEvent(msg)
 			logger.WarnContext(ctx, msg)
+			span.RecordError(errors.New(msg))
 			return nil, status.Error(codes.DeadlineExceeded, msg)
 		}
 	}
@@ -388,12 +390,14 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 		span.SetStatus(otelcodes.Error, msg)
 		span.AddEvent(msg)
 		logger.ErrorContext(ctx, msg, "event", "GetProduct failed")
+		span.RecordError(errors.New(msg))
 		return nil, status.Errorf(codes.Internal, msg)
 	}
 
 	var product Product
 	if err := db.WithContext(ctx).Preload("Categories").Where("id = ?", req.Id).First(&product).Error; err != nil {
 		logger.ErrorContext(ctx, err.Error(), "event", "GetProduct failed")
+		span.RecordError(err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			msg := fmt.Sprintf("Product Not Found: %s", req.Id)
 			span.SetStatus(otelcodes.Error, msg)

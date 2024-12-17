@@ -10,6 +10,9 @@
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opentelemetry-demo)](https://artifacthub.io/packages/helm/opentelemetry-helm/opentelemetry-demo)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/9247/badge)](https://www.bestpractices.dev/en/projects/9247)
 
+## Required
+Docker compose version >= 2.20.3
+
 ## Start the demo
 1. `make build`
 2. `docker compose -f compose.yml up -d` or `make start`

@@ -314,18 +314,21 @@ func (cs *checkoutService) PlaceOrder(ctx context.Context, req *pb.PlaceOrderReq
 	var err error
 	defer func() {
 		if err != nil {
-			span.AddEvent("error", trace.WithAttributes(semconv.ExceptionMessageKey.String(err.Error())))
+			span.RecordError(err)
+			//span.AddEvent("error", trace.WithAttributes(semconv.ExceptionMessageKey.String(err.Error())))
 		}
 	}()
 
 	orderID, err := uuid.NewUUID()
 	if err != nil {
+		span.RecordError(err)
 		return nil, status.Errorf(codes.Internal, "failed to generate order uuid")
 	}
 
 	prep, err := cs.prepareOrderItemsAndShippingQuoteFromCart(ctx, req.UserId, req.UserCurrency, req.Address)
 	if err != nil {
 		logger.ErrorContext(ctx, err.Error(), "event", "prepareOrderItemsAndShippingQuoteFromCart failed")
+		span.RecordError(err)
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 	span.AddEvent("prepared")
@@ -342,7 +345,7 @@ func (cs *checkoutService) PlaceOrder(ctx context.Context, req *pb.PlaceOrderReq
 	txID, err := cs.chargeCard(ctx, total, req.CreditCard)
 	if err != nil {
 		logger.ErrorContext(ctx, err.Error(), "event", "chargeCard failed")
-
+		span.RecordError(err)
 		return nil, status.Errorf(codes.Internal, "failed to charge card: %+v", err)
 	}
 	logger.InfoContext(ctx, "payment went through", "transaction_id", txID)
@@ -354,7 +357,7 @@ func (cs *checkoutService) PlaceOrder(ctx context.Context, req *pb.PlaceOrderReq
 	shippingTrackingID, err := cs.shipOrder(ctx, req.Address, prep.cartItems)
 	if err != nil {
 		logger.ErrorContext(ctx, err.Error(), "event", "shipOrder failed")
-
+		span.RecordError(err)
 		return nil, status.Errorf(codes.Unavailable, "shipping error: %+v", err)
 	}
 	shippingTrackingAttribute := attribute.String("app.shipping.tracking.id", shippingTrackingID)
@@ -408,7 +411,6 @@ type orderPrep struct {
 }
 
 func (cs *checkoutService) prepareOrderItemsAndShippingQuoteFromCart(ctx context.Context, userID, userCurrency string, address *pb.Address) (orderPrep, error) {
-
 	ctx, span := tracer.Start(ctx, "prepareOrderItemsAndShippingQuoteFromCart")
 	defer span.End()
 
