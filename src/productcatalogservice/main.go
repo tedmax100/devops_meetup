@@ -30,7 +30,6 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -371,24 +370,22 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 		ctx, "productCatalogTimeoutFailure.enabled", 0, openfeature.EvaluationContext{},
 	)
 	if timeoutFailureEnabled > 0 {
+		span.SetAttributes(attribute.KeyValue{Key: "productCatalogLongTailLatency", Value: attribute.BoolValue(true)})
 		timeoutRate, _ := client.IntValue(
 			ctx, "productCatalogTimeoutRate.low", 1, openfeature.EvaluationContext{},
 		)
 		if rand.Intn(100) < int(timeoutRate) {
 			msg := "Simulated ProductCatalogService timeout"
-			span.SetStatus(otelcodes.Error, msg)
-			span.AddEvent(msg)
 			logger.WarnContext(ctx, msg)
-			span.RecordError(errors.New(msg))
+			span.RecordError(errors.New(msg), trace.WithAttributes(attribute.KeyValue{Key: ""}))
 			return nil, status.Error(codes.DeadlineExceeded, msg)
 		}
 	}
 
 	// GetProduct will fail on a specific product when feature flag is enabled
 	if p.checkProductFailure(ctx, req.Id) {
+		span.SetAttributes(attribute.KeyValue{Key: "productCatalogFailure", Value: attribute.BoolValue(true)})
 		msg := fmt.Sprintf("Error: ProductCatalogService Fail Feature Flag Enabled")
-		span.SetStatus(otelcodes.Error, msg)
-		span.AddEvent(msg)
 		logger.ErrorContext(ctx, msg, "event", "GetProduct failed")
 		span.RecordError(errors.New(msg))
 		return nil, status.Errorf(codes.Internal, msg)
@@ -400,14 +397,10 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 		span.RecordError(err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			msg := fmt.Sprintf("Product Not Found: %s", req.Id)
-			span.SetStatus(otelcodes.Error, msg)
-			span.AddEvent(msg)
 			return nil, status.Errorf(codes.NotFound, msg)
 		}
 
 		msg := fmt.Sprintf("Database Error: %v", err)
-		span.SetStatus(otelcodes.Error, msg)
-		span.AddEvent(msg)
 		return nil, status.Errorf(codes.Internal, msg)
 	}
 
@@ -428,8 +421,6 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 		Categories: categoryNames,
 	}
 
-	msg := fmt.Sprintf("Product Found - ID: %s, Name: %s", req.Id, pbProduct.Name)
-	span.AddEvent(msg)
 	span.SetAttributes(
 		attribute.String("app.product.name", pbProduct.Name),
 	)
