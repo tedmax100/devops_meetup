@@ -30,6 +30,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -364,18 +365,22 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 		time.Sleep(time.Duration(delay) * time.Millisecond)
 	}
 
-	timeoutFailureEnabled, _ := client.BooleanValue(
-		ctx, "productCatalogTimeoutFailure", false, openfeature.EvaluationContext{},
+	timeoutFailureProbability, _ := client.FloatValue(
+		ctx, "productCatalogTimeoutFailure", 0, openfeature.EvaluationContext{},
 	)
-	if timeoutFailureEnabled {
+	if rand.Float64() < timeoutFailureProbability {
 		span.SetAttributes(attribute.KeyValue{Key: "productCatalogLongTailLatency", Value: attribute.BoolValue(true)})
-		timeoutRate, _ := client.IntValue(
-			ctx, "productCatalogTimeoutRate", 1, openfeature.EvaluationContext{},
-		)
-		if rand.Intn(100) < int(timeoutRate) {
+		delay := time.Duration(rand.Intn(int(3000) + 1))
+		timeoutCtx, cancel := context.WithTimeout(ctx, delay*time.Millisecond)
+		defer cancel()
+
+		select {
+		case <-time.After(3 * time.Second):
+		case <-timeoutCtx.Done():
 			msg := "Simulated ProductCatalogService timeout"
 			logger.WarnContext(ctx, msg)
-			span.RecordError(errors.New(msg), trace.WithAttributes(attribute.KeyValue{Key: ""}))
+			span.SetStatus(otelcodes.Error, msg)
+			span.RecordError(errors.New(msg))
 			return nil, status.Error(codes.DeadlineExceeded, msg)
 		}
 	}
@@ -385,6 +390,7 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 		span.SetAttributes(attribute.KeyValue{Key: "productCatalogFailure", Value: attribute.BoolValue(true)})
 		msg := fmt.Sprintf("Error: ProductCatalogService Fail Feature Flag Enabled")
 		logger.ErrorContext(ctx, msg, "event", "GetProduct failed")
+		span.SetStatus(otelcodes.Error, msg)
 		span.RecordError(errors.New(msg))
 		return nil, status.Errorf(codes.Internal, msg)
 	}
@@ -392,6 +398,7 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 	var product Product
 	if err := db.WithContext(ctx).Preload("Categories").Where("id = ?", req.Id).First(&product).Error; err != nil {
 		logger.ErrorContext(ctx, err.Error(), "event", "GetProduct failed")
+		span.SetStatus(otelcodes.Error, "GetProduct failed")
 		span.RecordError(err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			msg := fmt.Sprintf("Product Not Found: %s", req.Id)

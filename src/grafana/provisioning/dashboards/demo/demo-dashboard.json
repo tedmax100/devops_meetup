@@ -392,8 +392,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-opensearch-datasource",
-        "uid": "P9744FCCEAAFBD98F"
+        "type": "loki",
+        "uid": "loki"
       },
       "description": "",
       "fieldConfig": {
@@ -460,35 +460,36 @@
       "pluginVersion": "11.3.1",
       "targets": [
         {
-          "alias": "",
-          "bucketAggs": [
-            {
-              "field": "time",
-              "id": "2",
-              "settings": {
-                "interval": "auto"
-              },
-              "type": "date_histogram"
-            }
-          ],
           "datasource": {
-            "type": "grafana-opensearch-datasource",
-            "uid": "P9744FCCEAAFBD98F"
+            "type": "loki",
+            "uid": "loki"
           },
-          "format": "table",
-          "metrics": [
-            {
-              "id": "1",
-              "type": "count"
-            }
-          ],
-          "query": "search source=otel\n| where resource.service.name=\"${service}\"\n| stats count() by severity.text",
-          "queryType": "PPL",
-          "refId": "A",
-          "timeField": "time"
+          "editorMode": "code",
+          "expr": "sum by (severity_text) (count_over_time({service_name=\"${service}\"}[1h]))",
+          "queryType": "instant",
+          "refId": "A"
         }
       ],
       "title": "${service} Log entries by Severity",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "includeByName": {},
+            "indexByName": {
+              "Time": 0,
+              "Value #A": 1,
+              "severity_text": 2
+            },
+            "renameByName": {
+              "Value #A": "count()"
+            }
+          }
+        }
+      ],
       "type": "table"
     },
     {

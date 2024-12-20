@@ -499,46 +499,7 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT
       - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
       - OTEL_RESOURCE_ATTRIBUTES
-      - OTEL_SERVICE_NAME=productcatalogservice_1
-    depends_on:
-      otelcol:
-        condition: service_started
-      flagd:
-        condition: service_started
-      postgres_replica:
-        condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.tcp.routers.productcatalogservice.rule=HostSNI(`*`)"
-      - "traefik.tcp.routers.productcatalogservice.entrypoints=tcp-grpc"
-      - "traefik.tcp.routers.productcatalogservice.service=productcatalogservice"
-      - "traefik.tcp.services.productcatalogservice.loadbalancer.server.port=3550"
-    logging: *logging
-
-  # Product Catalog service
-  productcatalogservice_2:
-    image: ${IMAGE_NAME}:${DEMO_VERSION}-productcatalogservice
-    container_name: product-catalog-service_2
-    build:
-      context: ./
-      dockerfile: ${PRODUCT_CATALOG_DOCKERFILE}
-      cache_from:
-        - ${IMAGE_NAME}:${IMAGE_VERSION}-productcatalogservice
-    deploy:
-      resources:
-        limits:
-          memory: 20M
-    restart: unless-stopped
-    #ports:
-    #  - "${PRODUCT_CATALOG_SERVICE_PORT}"
-    environment:
-      - PRODUCT_CATALOG_SERVICE_PORT
-      - FLAGD_HOST
-      - FLAGD_PORT
-      - OTEL_EXPORTER_OTLP_ENDPOINT
-      - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
-      - OTEL_RESOURCE_ATTRIBUTES
-      - OTEL_SERVICE_NAME=productcatalogservice_2
+      - OTEL_SERVICE_NAME=productcatalogservice
     depends_on:
       otelcol:
         condition: service_started

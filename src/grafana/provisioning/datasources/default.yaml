@@ -36,7 +36,7 @@ datasources:
     editable: true
     jsonData:
       nodeGraph:
-        eabled: true
+        enabled: true
       serviceMap:
         datasourceUid: 'webstore-metrics'
       tracesToLogsV2:

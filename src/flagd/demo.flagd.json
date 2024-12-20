@@ -8,7 +8,7 @@
         "on": true,
         "off": false
       },
-      "defaultVariant": "off"
+      "defaultVariant": "on"
     },
     "recommendationServiceCacheFailure": {
       "description": "Fail recommendation service cache",
@@ -76,7 +76,7 @@
         "10%": 0.1,
         "off": 0
       },
-      "defaultVariant": "off"
+      "defaultVariant": "75%"
     },
     "paymentServiceUnreachable": {
       "description": "Payment service is unavailable",
@@ -110,10 +110,10 @@
       "description": "Simulate long-tail latency in ProductCatalogService",
       "state": "ENABLED",
       "variants": {
-        "enabled": true,
-        "disabled": false
+        "on": true,
+        "off": false
       },
-      "defaultVariant": "enabled"
+      "defaultVariant": "off"
     },
     "productCatalogLatencyMs": {
       "description": "Set the delay range (ms) for ProductCatalogService when long-tail latency is enabled",
@@ -123,16 +123,21 @@
         "high": 4000,
         "disabled": 0
       },
-      "defaultVariant": "high"
+      "defaultVariant": "disabled"
     },
     "productCatalogTimeoutFailure": {
       "description": "Simulate timeout failures in ProductCatalogService",
       "state": "ENABLED",
       "variants": {
-        "enabled": 1,
-        "disabled": 0
+        "100%": 1,
+        "90%": 0.95,
+        "75%": 0.75,
+        "50%": 0.5,
+        "25%": 0.25,
+        "10%": 0.1,
+        "off": 0
       },
-      "defaultVariant": "enabled"
+      "defaultVariant": "50%"
     },
     "productCatalogTimeoutRate": {
       "description": "Set the failure rate (%) for ProductCatalogService timeouts",
