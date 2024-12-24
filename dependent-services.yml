@@ -151,7 +151,7 @@ services:
     volumes:
       - ./init/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: "pg_isready -U user"
+      test: "pg_isready -U user -d postgres"
       interval: 10s
       timeout: 5s
       retries: 3
@@ -166,17 +166,21 @@ services:
       RETRY_DELAY: 1
     command: |
       bash -c "
-      RETRY_DELAY=1
-      until pg_basebackup --pgdata=/var/lib/postgresql/data -R --slot=replication_slot --host=postgres_primary --port=5432
-      do
-      echo 'Waiting for primary to connect...'
-      sleep \$RETRY_DELAY
-      RETRY_DELAY=\$((RETRY_DELAY * 2))
-      if [ \$RETRY_DELAY -gt 60 ]; then
-        RETRY_DELAY=60
+      if [ -n \"$(ls -A /var/lib/postgresql/data)\" ]; then
+        echo 'Data directory is not empty. Skipping pg_basebackup.'
+      else
+        RETRY_DELAY=1
+        until pg_basebackup --pgdata=/var/lib/postgresql/data -R --slot=replication_slot --host=postgres_primary --port=5432
+        do
+        echo 'Waiting for primary to connect...'
+        sleep \$RETRY_DELAY
+        RETRY_DELAY=\$((RETRY_DELAY * 2))
+        if [ \$RETRY_DELAY -gt 60 ]; then
+          RETRY_DELAY=60
+        fi
+        done
+        echo 'Backup done, starting replica...'
       fi
-      done
-      echo 'Backup done, starting replica...'
       chmod 0700 /var/lib/postgresql/data
       postgres
       "
